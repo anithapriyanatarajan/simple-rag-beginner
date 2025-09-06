@@ -1,0 +1,39 @@
+package api
+
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+	"simple-rag-beginner/internal/rag"
+)
+
+type QueryRequest struct {
+	Query string `json:"query"`
+}
+
+type QueryResponse struct {
+	Response string `json:"response"`
+}
+
+func NewRouter() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/query", handleQuery)
+	// Serve static files at root
+	mux.Handle("/", StaticHandler())
+	return mux
+}
+
+func handleQuery(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var req QueryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Invalid request: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	response := rag.GenerateResponse(req.Query)
+	json.NewEncoder(w).Encode(QueryResponse{Response: response})
+}
