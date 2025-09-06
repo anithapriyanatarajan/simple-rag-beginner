@@ -23,6 +23,10 @@ type ModelConfig struct {
 	MaxTokens    int     // Maximum tokens for generation
 	Temperature  float64 // Temperature for generation (0.0-1.0)
 	SystemPrompt string  // System prompt for the AI
+
+	// Qdrant Vector Database Settings
+	QdrantHost string // Qdrant host
+	QdrantPort int    // Qdrant gRPC port
 }
 
 // DefaultConfig returns the default configuration
@@ -45,6 +49,10 @@ func DefaultConfig() *ModelConfig {
 		Temperature: getEnvFloat("TEMPERATURE", 0.7),
 		SystemPrompt: getEnv("SYSTEM_PROMPT",
 			"You are a helpful AI assistant. Use the provided context to answer questions accurately and concisely. If the context doesn't contain relevant information, say so clearly."),
+
+		// Qdrant configuration
+		QdrantHost: getEnv("QDRANT_HOST", "localhost"),
+		QdrantPort: getEnvInt("QDRANT_PORT", 6334),
 	}
 }
 

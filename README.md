@@ -2,6 +2,12 @@
 
 A Go-based Retrieval-Augmented Generation (RAG) chatbot with **real AI integration** using Ollama for both text generation and embeddings.
 
+## 📚 Documentation
+
+- **[🏗️ Architecture Guide](ARCHITECTURE.md)** - Complete system design, component details, and technical specifications
+- **[🐳 Docker Guide](DOCKER.md)** - Comprehensive Docker deployment, development setup, and troubleshooting
+- **[📖 Main Guide](#-quick-start)** - Getting started, features, and basic usage (this file)
+
 ## ✨ Features
 
 - **🤖 Real AI Models**: Powered by Ollama with LLaMA 3.2 and nomic-embed-text
@@ -21,6 +27,8 @@ A Go-based Retrieval-Augmented Generation (RAG) chatbot with **real AI integrati
 └─────────────────┘    └──────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
+📖 **Detailed Architecture**: See [ARCHITECTURE.md](ARCHITECTURE.md) for complete system design, component details, and data flow diagrams.
+
 **Core Components:**
 - `cmd/main.go` — Application entry point with Ollama integration
 - `internal/api/` — REST endpoints and static file serving
@@ -36,6 +44,28 @@ A Go-based Retrieval-Augmented Generation (RAG) chatbot with **real AI integrati
 > 📋 **Detailed Structure**: See [`PROJECT_STRUCTURE.md`](PROJECT_STRUCTURE.md) for comprehensive architecture documentation.
 
 ## 🚀 Quick Start
+
+Choose your deployment method:
+
+### 🐳 Docker Deployment (Recommended)
+```bash
+# One-command full deployment
+./scripts/docker-deploy.sh
+```
+✅ **Includes everything**: Qdrant, Ollama, AI models, and the application  
+✅ **Production ready**: Health checks, proper networking, persistent storage  
+✅ **Cross-platform**: Works on Linux, macOS, and Windows  
+
+**Access after deployment:**
+- Web UI: http://localhost:8080  
+- API: http://localhost:8080/query
+- Qdrant Dashboard: http://localhost:6333/dashboard
+
+📖 **Full Docker guide**: See [DOCKER.md](DOCKER.md)
+
+### ⚡ Local Development
+
+For local development or if you prefer running services individually:
 
 ### Prerequisites
 - **Go 1.20+**

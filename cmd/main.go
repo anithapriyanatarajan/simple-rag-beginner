@@ -30,7 +30,7 @@ func main() {
 	}
 
 	// Initialize vector DB
-	if err := vectordb.InitQdrant("localhost:6333"); err != nil {
+	if err := vectordb.InitQdrant(cfg); err != nil {
 		log.Printf("Warning: Failed to initialize Qdrant: %v", err)
 	}
 	defer vectordb.CloseQdrant()

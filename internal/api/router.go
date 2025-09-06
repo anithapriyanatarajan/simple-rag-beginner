@@ -21,6 +21,7 @@ func NewRouter() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/query", handleQuery)
 	mux.HandleFunc("/model/info", handleModelInfo)
+	mux.HandleFunc("/health", handleHealth)
 	// Serve static files at root
 	mux.Handle("/", StaticHandler())
 	return mux
@@ -49,4 +50,19 @@ func handleModelInfo(w http.ResponseWriter, r *http.Request) {
 	info := model.GetModelInfo()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(info)
+}
+
+func handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Simple health check - returns 200 OK if the service is running
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "healthy",
+		"service": "rag-chatbot",
+	})
 }

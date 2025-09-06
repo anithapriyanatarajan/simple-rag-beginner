@@ -1,0 +1,55 @@
+# Build artifacts
+main
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Local development
+*.log
+.env
+.env.local
+
+# Qdrant storage (handled by Docker volume)
+qdrant_storage/
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+!DOCKER.md
+!ARCHITECTURE.md
+
+# Removed/obsolete files
+scripts/setup-qdrant.sh
+scripts/setup-ollama.sh
+scripts/cleanup.sh
+PROJECT_STRUCTURE.md

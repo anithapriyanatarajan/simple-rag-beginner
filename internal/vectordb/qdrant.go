@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/qdrant/go-client/qdrant"
 
+	"simple-rag-beginner/internal/config"
 	"simple-rag-beginner/internal/embedding"
 )
 
@@ -16,12 +17,12 @@ var (
 )
 
 // InitQdrant initializes the Qdrant client and creates collection if needed
-func InitQdrant(url string) error {
-	// Create client with localhost configuration
+func InitQdrant(cfg *config.ModelConfig) error {
+	// Create client with configuration
 	var err error
 	client, err = qdrant.NewClient(&qdrant.Config{
-		Host: "localhost",
-		Port: 6334,
+		Host: cfg.QdrantHost,
+		Port: cfg.QdrantPort,
 	})
 	if err != nil {
 		log.Printf("Failed to create Qdrant client: %v", err)
