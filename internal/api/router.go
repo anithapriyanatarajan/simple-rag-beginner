@@ -12,7 +12,8 @@ type QueryRequest struct {
 }
 
 type QueryResponse struct {
-	Response string `json:"response"`
+	Response string   `json:"response"`
+	Context  []string `json:"context"`
 }
 
 func NewRouter() http.Handler {
@@ -34,6 +35,6 @@ func handleQuery(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	response := rag.GenerateResponse(req.Query)
-	json.NewEncoder(w).Encode(QueryResponse{Response: response})
+	response, context := rag.GenerateResponseWithContext(req.Query)
+	json.NewEncoder(w).Encode(QueryResponse{Response: response, Context: context})
 }

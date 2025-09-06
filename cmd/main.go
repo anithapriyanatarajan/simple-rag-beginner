@@ -9,9 +9,16 @@ import (
 	"net/http"
 	"os"
 	"simple-rag-beginner/internal/api"
+	"simple-rag-beginner/internal/vectordb"
 )
 
 func main() {
+	// Initialize vector DB
+	if err := vectordb.InitQdrant("localhost:6333"); err != nil {
+		log.Printf("Warning: Failed to initialize Qdrant: %v", err)
+	}
+	defer vectordb.CloseQdrant()
+
 	if len(os.Args) > 1 && os.Args[1] == "cli" {
 		runCLI()
 		return
@@ -38,7 +45,7 @@ func runCLI() {
 			log.Printf("Request error: %v", err)
 			continue
 		}
-		var result map[string]string
+		var result map[string]interface{}
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			log.Printf("Decode error: %v", err)
 			resp.Body.Close()
@@ -46,6 +53,9 @@ func runCLI() {
 		}
 		resp.Body.Close()
 		fmt.Printf("Response: %s\n", result["response"])
+		if ctx, ok := result["context"]; ok {
+			fmt.Printf("Retrieved context: %v\n", ctx)
+		}
 	}
 }
 
