@@ -7,17 +7,23 @@ This guide covers deploying the RAG Chatbot using Docker and Docker Compose.
 ### Prerequisites
 - Docker (v20.0+)
 - Docker Compose (v2.0+)
-- NVIDIA Docker runtime (for GPU support - optional)
+- NVIDIA Docker runtime (for GPU acceleration - optional)
 
 ### One-Command Deployment
 ```bash
-# Deploy the complete stack
+# Deploy the complete stack (auto-detects CPU/GPU)
 ./scripts/docker-deploy.sh
 ```
 
+**🎮 GPU vs 💻 CPU Mode:**
+- **GPU Mode**: Automatically enabled if NVIDIA GPU + Docker GPU support detected
+- **CPU Mode**: Default fallback - works on any system (slower but functional)
+- **Performance**: GPU is ~5-10x faster for AI inference
+
 This script will:
-1. Pull and start Qdrant vector database
-2. Pull and start Ollama AI server
+1. Detect GPU support and configure accordingly
+2. Pull and start Qdrant vector database
+3. Pull and start Ollama AI server (CPU or GPU mode)
 3. Download required AI models (LLaMA 3.2 and nomic-embed-text)
 4. Build and start the RAG application
 5. Verify all services are healthy
@@ -39,17 +45,23 @@ docker build -t rag-chatbot .
 ```
 
 ### Start Infrastructure Services
-```bash
-# Start Qdrant and Ollama
-docker-compose up -d qdrant ollama
 
-# Wait for services to be ready
-docker-compose ps
+**CPU-Only Systems (default):**
+```bash
+# Start Qdrant and Ollama in CPU mode
+docker-compose up -d qdrant ollama
+```
+
+**GPU-Enabled Systems:**
+```bash
+# Start with GPU acceleration
+docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d qdrant ollama
 ```
 
 ### Initialize AI Models
 ```bash
 # Pull required models (one-time setup)
+# Note: This may take 10-15 minutes on first run
 docker-compose --profile init run --rm ollama-init
 ```
 

@@ -19,6 +19,15 @@ if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/
     exit 1
 fi
 
+# Check for GPU support
+GPU_SUPPORT=false
+if command -v nvidia-smi &> /dev/null && docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi &> /dev/null; then
+    echo "🎮 NVIDIA GPU detected and Docker GPU support available"
+    GPU_SUPPORT=true
+else
+    echo "💻 No GPU support detected - using CPU mode (this is fine, just slower)"
+fi
+
 # Function to wait for service to be healthy
 wait_for_service() {
     local service_name=$1
@@ -45,9 +54,18 @@ wait_for_service() {
 echo "🧹 Cleaning up existing containers..."
 docker-compose down --volumes --remove-orphans 2>/dev/null || true
 
+# Determine compose files to use
+COMPOSE_FILES="-f docker-compose.yml"
+if [ "$GPU_SUPPORT" = true ]; then
+    echo "🎮 Using GPU-accelerated configuration"
+    COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.gpu.yml"
+else
+    echo "💻 Using CPU-only configuration"
+fi
+
 # Start the infrastructure services first
 echo "🏗️  Starting infrastructure services..."
-docker-compose up -d qdrant ollama
+docker-compose $COMPOSE_FILES up -d qdrant ollama
 
 # Wait for infrastructure to be ready
 wait_for_service qdrant
@@ -55,19 +73,26 @@ wait_for_service ollama
 
 # Initialize Ollama models
 echo "📥 Pulling Ollama models..."
-docker-compose --profile init run --rm ollama-init
+echo "⚠️  Note: Model download may take several minutes on first run..."
+docker-compose $COMPOSE_FILES --profile init run --rm ollama-init
 
 echo "✅ Models pulled successfully!"
 
 # Start the application
 echo "🚀 Starting RAG application..."
-docker-compose up -d rag-app
+docker-compose $COMPOSE_FILES up -d rag-app
 
 # Wait for application to be ready
 wait_for_service rag-app
 
 echo ""
 echo "🎉 RAG Chatbot deployed successfully!"
+echo ""
+if [ "$GPU_SUPPORT" = true ]; then
+    echo "🎮 Running with GPU acceleration"
+else
+    echo "💻 Running in CPU mode (expect slower responses)"
+fi
 echo ""
 echo "📋 Service URLs:"
 echo "   • RAG Chatbot:      http://localhost:8080"

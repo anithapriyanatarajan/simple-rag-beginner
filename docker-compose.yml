@@ -1,0 +1,105 @@
+services:
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: rag-qdrant
+    ports:
+      - "6333:6333"  # HTTP API
+      - "6334:6334"  # gRPC API
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 6333"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - rag-network
+
+  # Ollama AI Server
+  ollama:
+    image: ollama/ollama:latest
+    container_name: rag-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 11434"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - rag-network
+
+  # RAG Application
+  rag-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-app
+    ports:
+      - "8080:8080"
+    environment:
+      # Ollama Configuration
+      - GENERATIVE_ENDPOINT=http://ollama:11434
+      - EMBEDDING_ENDPOINT=http://ollama:11434
+      - GENERATIVE_MODEL=llama3.2:latest
+      - EMBEDDING_MODEL=nomic-embed-text:latest
+      
+      # Qdrant Configuration
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6334
+      
+      # Application Configuration
+      - MAX_TOKENS=512
+      - TEMPERATURE=0.7
+    depends_on:
+      - qdrant
+      - ollama
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - rag-network
+
+  # Model Initialization Service (runs once to pull models)
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: rag-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    command: >
+      sh -c "
+        echo 'Pulling models...' &&
+        ollama pull llama3.2:latest &&
+        ollama pull nomic-embed-text:latest &&
+        echo 'Models pulled successfully!'
+      "
+    networks:
+      - rag-network
+    profiles:
+      - init
+
+volumes:
+  qdrant_storage:
+  ollama_data:
+
+networks:
+  rag-network:
+    driver: bridge

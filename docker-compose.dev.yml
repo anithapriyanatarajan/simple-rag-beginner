@@ -1,6 +1,3 @@
-version: '3.8'
-
-# Development version with host networking and development-friendly settings
 services:
   # Qdrant Vector Database - Development
   qdrant-dev:
@@ -35,13 +32,6 @@ services:
     environment:
       - OLLAMA_HOST=0.0.0.0:11434
       - OLLAMA_KEEP_ALIVE=24h  # Keep models in memory longer for dev
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 30s
