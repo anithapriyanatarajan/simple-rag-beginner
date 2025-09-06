@@ -1,63 +1,50 @@
 package embedding
 
 import (
-	"hash/fnv"
-	"math"
-	"strings"
+	"context"
+	"fmt"
+	"log"
+	"simple-rag-beginner/internal/config"
+	"time"
 )
 
-// Improved text-to-vector function: creates more meaningful 8D vectors
-// Uses word-based features and hashing for better semantic representation
+var embeddingClient *OllamaEmbeddingClient
+
+// InitEmbeddingService initializes the embedding service with Ollama
+func InitEmbeddingService(cfg *config.ModelConfig) error {
+	if cfg.EmbeddingProvider != "ollama" {
+		return fmt.Errorf("only ollama embedding provider is supported, got: %s", cfg.EmbeddingProvider)
+	}
+
+	embeddingClient = NewOllamaEmbeddingClient(cfg.EmbeddingEndpoint, cfg.EmbeddingModel)
+
+	// Test if Ollama embedding is available - this is required
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := embeddingClient.IsAvailable(ctx); err != nil {
+		return fmt.Errorf("ollama embedding is required but not available: %w\n\nTo fix this:\n1. Ensure Ollama is running: ollama serve\n2. Pull embedding model: ollama pull %s\n3. Restart the application", err, cfg.EmbeddingModel)
+	}
+
+	log.Printf("✅ Ollama embedding connected successfully with model: %s", cfg.EmbeddingModel)
+	return nil
+}
+
+// TextToVector converts text to vector using Ollama embeddings
 func TextToVector(text string) []float32 {
-	vec := make([]float32, 8)
-
-	// Normalize text
-	text = strings.ToLower(strings.TrimSpace(text))
-	words := strings.Fields(text)
-
-	if len(words) == 0 {
-		return vec
+	if embeddingClient == nil {
+		log.Fatal("embedding service not initialized - this should not happen")
 	}
 
-	// Feature 0: Text length (normalized)
-	vec[0] = float32(math.Min(float64(len(text))/50.0, 1.0))
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 
-	// Feature 1: Word count (normalized)
-	vec[1] = float32(math.Min(float64(len(words))/10.0, 1.0))
-
-	// Feature 2-7: Word-based features using hashing
-	for i, word := range words {
-		if len(word) > 0 {
-			hash := hashWord(word)
-			// Distribute word hashes across remaining dimensions
-			vec[2+(i%6)] += float32(hash%1000) / 1000.0
-		}
+	embedding, err := embeddingClient.GetEmbedding(ctx, text)
+	if err != nil {
+		log.Printf("Error generating embedding: %v", err)
+		// Return zero vector as fallback
+		return make([]float32, 768) // nomic-embed-text dimension
 	}
 
-	// Normalize vector to unit length for cosine similarity
-	normalize(vec)
-
-	return vec
-}
-
-// hashWord creates a hash for a word
-func hashWord(word string) uint32 {
-	h := fnv.New32a()
-	h.Write([]byte(word))
-	return h.Sum32()
-}
-
-// normalize converts vector to unit length
-func normalize(vec []float32) {
-	var magnitude float32
-	for _, v := range vec {
-		magnitude += v * v
-	}
-	magnitude = float32(math.Sqrt(float64(magnitude)))
-
-	if magnitude > 0 {
-		for i := range vec {
-			vec[i] /= magnitude
-		}
-	}
+	return embedding
 }

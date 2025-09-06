@@ -28,11 +28,16 @@ func InitQdrant(url string) error {
 		return err
 	}
 
-	// Create collection with vector configuration
+	// Determine vector dimension by testing embedding
+	testVec := embedding.TextToVector("test")
+	vectorSize := len(testVec)
+	log.Printf("Using vector dimension: %d", vectorSize)
+
+	// Create collection with dynamic vector configuration
 	err = client.CreateCollection(context.Background(), &qdrant.CreateCollection{
 		CollectionName: collectionName,
 		VectorsConfig: qdrant.NewVectorsConfig(&qdrant.VectorParams{
-			Size:     8, // Match our embedding dimension
+			Size:     uint64(vectorSize),
 			Distance: qdrant.Distance_Cosine,
 		}),
 	})

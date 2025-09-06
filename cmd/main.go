@@ -9,10 +9,26 @@ import (
 	"net/http"
 	"os"
 	"simple-rag-beginner/internal/api"
+	"simple-rag-beginner/internal/config"
+	"simple-rag-beginner/internal/embedding"
+	"simple-rag-beginner/internal/model"
 	"simple-rag-beginner/internal/vectordb"
 )
 
 func main() {
+	// Initialize configuration
+	cfg := config.DefaultConfig()
+
+	// Initialize embedding service - Ollama embeddings are required
+	if err := embedding.InitEmbeddingService(cfg); err != nil {
+		log.Fatalf("Failed to initialize embedding service: %v", err)
+	}
+
+	// Initialize model service - Ollama is required
+	if err := model.InitModelService(cfg); err != nil {
+		log.Fatalf("Failed to initialize model service: %v", err)
+	}
+
 	// Initialize vector DB
 	if err := vectordb.InitQdrant("localhost:6333"); err != nil {
 		log.Printf("Warning: Failed to initialize Qdrant: %v", err)
@@ -24,6 +40,7 @@ func main() {
 		return
 	}
 	log.Println("Starting RAG Chatbot REST API on :8080...")
+	log.Printf("Model info: %+v", model.GetModelInfo())
 	if err := http.ListenAndServe(":8080", setupRouter()); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
