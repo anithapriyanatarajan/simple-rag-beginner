@@ -1,51 +1,134 @@
 
 
-# Kubernetes RAG Pipeline
+# RAG Microservices Pipeline
 
-A production-ready, microservices-based Retrieval-Augmented Generation (RAG) system built with Go and deployed on Kubernetes.
+A production-ready Retrieval-Augmented Generation (RAG) system built with Go microservices and Docker Compose.
 
----
-
-## Architecture
-
-- **Crawler**: Scrapes web content using Colly
-- **Parser**: Extracts and chunks text using goquery  
-- **Embedder**: Generates embeddings via OpenAI API and stores in Qdrant
-- **RAG API**: Handles queries, retrieval, and LLM responses
-- **Qdrant**: Vector database (StatefulSet with persistent storage)
-
----
-
-## Quick Start
+## 🚀 Quick Start
 
 ### Prerequisites
-- Kubernetes cluster
-- Docker
-- Go 1.23+
+- Docker & Docker Compose
 - OpenAI API key
 
-### Deploy to Kubernetes
+### 1. Setup Environment
+```bash
+export OPENAI_API_KEY="your-api-key-here"
+```
 
-1. **Setup OpenAI API key:**
-   ```bash
-   export OPENAI_API_KEY="your-api-key-here"
-   make setup-openai
-   ```
+### 2. Start Services
+```bash
+make up
+```
 
-2. **Build and deploy:**
-   ```bash
-   make docker-build
-   make k8s-deploy
-   ```
+### 3. Access the System
+- **Web UI**: http://localhost:8080
+- **RAG API**: http://localhost:8080/query
+- **Direct LLM**: http://localhost:8080/query-direct
+- **Qdrant Dashboard**: http://localhost:6333/dashboard
 
-3. **Test the pipeline:**
-   ```bash
-   # Test crawler
-   make test-crawl
-   
-   # Test RAG API
-   make test-rag
-   ```
+## 🏗️ Architecture
+
+```
+Web Scraping → Text Processing → Vector Embeddings → Query & Response
+    ↓              ↓                 ↓                    ↓
+  Crawler      →  Parser        →  Embedder         →  RAG API
+    ↓              ↓                 ↓                    ↓
+ Colly            goquery        OpenAI API         Gin + OpenAI
+                                     ↓
+                                  Qdrant Vector DB
+```
+
+### Services
+- **Crawler** (`:8081`): Web scraping with Colly
+- **Parser** (`:8082`): HTML parsing and text chunking  
+- **Embedder** (`:8083`): OpenAI embeddings + Qdrant storage
+- **RAG API** (`:8080`): Query interface with web UI
+- **Qdrant** (`:6333`): Vector database
+
+## 🧪 Testing
+
+### Web Interface
+Visit http://localhost:8080 and toggle between:
+- **RAG Mode**: Uses vector database retrieval
+- **Direct Mode**: Pure LLM responses
+
+### API Testing
+```bash
+# Test RAG with vector retrieval
+curl -X POST http://localhost:8080/query 
+  -H "Content-Type: application/json" 
+  -d '{"query": "What is Tekton?"}'
+
+# Test direct LLM (no vector DB)
+curl -X POST http://localhost:8080/query-direct 
+  -H "Content-Type: application/json" 
+  -d '{"query": "What is Tekton?"}'
+
+# Test crawl + query pipeline
+curl -X POST http://localhost:8080/crawl-and-query 
+  -H "Content-Type: application/json" 
+  -d '{"url": "https://tekton.dev", "query": "What is Tekton?", "collection": "my-docs"}'
+```
+
+### Health Checks
+```bash
+make health
+```
+
+## 📋 Available Commands
+
+```bash
+make help           # Show all commands
+make up             # Start all services  
+make down           # Stop all services
+make logs           # View all logs
+make test           # Test both RAG modes
+make restart-api    # Restart just the API
+make clean          # Clean up resources
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+- `OPENAI_API_KEY`: Required for embeddings and LLM
+- `CHUNK_SIZE`: Text chunk size (default: 2000)
+- `VECTOR_DIM`: Embedding dimensions (default: 1536)
+
+### Ports
+- `8080`: RAG API (main interface)
+- `8081`: Crawler service
+- `8082`: Parser service  
+- `8083`: Embedder service
+- `6333`: Qdrant HTTP API
+- `6334`: Qdrant gRPC API
+
+## 🎯 Use Cases
+
+1. **RAG Comparison**: Compare responses with/without vector retrieval
+2. **Document Q&A**: Crawl websites and ask questions about content
+3. **Knowledge Base**: Build searchable knowledge from web content
+4. **Research Tool**: Extract insights from multiple web sources
+
+## 🚀 Kubernetes Deployment
+
+For production Kubernetes deployment:
+```bash
+make k8s-deploy
+```
+
+## 📁 Project Structure
+
+```
+cmd/                    # Microservices
+├── crawler/           # Web scraping service
+├── parser/            # Text processing service  
+├── embedder/          # Vector embedding service
+└── rag-api/           # Main API + web interface
+deploy/k8s/            # Kubernetes manifests
+web/                   # Web UI assets
+docker-compose.yml     # Local development
+Makefile              # Build & run commands
+```
 
 ### Local Development
 

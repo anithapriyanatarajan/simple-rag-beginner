@@ -1,4 +1,4 @@
-# Kubernetes RAG Pipeline Makefile
+# RAG Microservices Pipeline Makefile
 
 REGISTRY ?= localhost:5000
 TAG ?= latest
@@ -11,28 +11,56 @@ SERVICES = crawler parser embedder rag-api
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
-build: ## Build all Go binaries
-	@echo "Building Go services..."
-	@for service in $(SERVICES); do \
-		echo "Building $$service..."; \
-		cd cmd/$$service && go build -o ../../bin/$$service . && cd ../..; \
-	done
+# Docker Compose targets (Primary)
+up: ## Start all services with Docker Compose
+	docker-compose up -d
 
-docker-build: ## Build all Docker images
-	@echo "Building Docker images..."
-	@for service in $(SERVICES); do \
-		echo "Building $(REGISTRY)/rag/$$service:$(TAG)..."; \
-		docker build -f cmd/$$service/Dockerfile -t $(REGISTRY)/rag/$$service:$(TAG) .; \
-	done
+down: ## Stop all services with Docker Compose
+	docker-compose down -v
 
-docker-push: docker-build ## Push Docker images to registry
-	@echo "Pushing Docker images..."
-	@for service in $(SERVICES); do \
-		echo "Pushing $(REGISTRY)/rag/$$service:$(TAG)..."; \
-		docker push $(REGISTRY)/rag/$$service:$(TAG); \
-	done
+build: ## Build all Docker images
+	docker-compose build
 
-k8s-deploy: ## Deploy to Kubernetes
+restart: ## Restart all services
+	docker-compose restart
+
+logs: ## Show logs from all services
+	docker-compose logs -f
+
+status: ## Show service status
+	docker-compose ps
+
+# Individual service operations
+restart-api: ## Restart just the RAG API
+	docker-compose restart rag-api
+
+logs-api: ## Show RAG API logs
+	docker-compose logs -f rag-api
+
+# Testing targets
+test: ## Test the RAG system (both modes)
+	@echo "Testing RAG mode..."
+	curl -X POST http://localhost:8080/query \
+		-H "Content-Type: application/json" \
+		-d '{"query": "What is Tekton?"}'
+	@echo "\nTesting Direct mode..."
+	curl -X POST http://localhost:8080/query-direct \
+		-H "Content-Type: application/json" \
+		-d '{"query": "What is Tekton?"}'
+
+test-crawl: ## Test web crawling
+	curl -X POST http://localhost:8080/crawl-and-query \
+		-H "Content-Type: application/json" \
+		-d '{"url": "https://tekton.dev", "query": "What is Tekton?", "collection": "test-collection"}'
+
+health: ## Check service health
+	@echo "Checking RAG API health..."
+	curl -s http://localhost:8080/health | jq .
+	@echo "Checking Qdrant health..."
+	curl -s http://localhost:6333/health | jq .
+
+# Kubernetes targets (Optional)
+k8s-deploy: docker-build ## Deploy to Kubernetes
 	@echo "Deploying to Kubernetes..."
 	kubectl apply -f deploy/k8s/qdrant.yaml
 	kubectl apply -f deploy/k8s/services.yaml
@@ -51,41 +79,9 @@ k8s-undeploy: ## Remove from Kubernetes
 	kubectl delete -f deploy/k8s/qdrant.yaml --ignore-not-found
 	kubectl delete namespace rag --ignore-not-found
 
-k8s-logs: ## Show logs from all services
-	@echo "=== Crawler Logs ==="
-	kubectl logs -l app=crawler -n rag --tail=50
-	@echo "=== Parser Logs ==="
-	kubectl logs -l app=parser -n rag --tail=50
-	@echo "=== Embedder Logs ==="
-	kubectl logs -l app=embedder -n rag --tail=50
-	@echo "=== RAG API Logs ==="
-	kubectl logs -l app=rag-api -n rag --tail=50
-	@echo "=== Qdrant Logs ==="
-	kubectl logs -l app=qdrant -n rag --tail=50
-
 k8s-status: ## Show Kubernetes status
 	kubectl get all -n rag
 	kubectl get pvc -n rag
-	kubectl get configmaps -n rag
-	kubectl get secrets -n rag
-
-test-crawl: ## Test crawler service
-	@echo "Testing crawler..."
-	kubectl port-forward svc/crawler 8081:8080 -n rag &
-	sleep 2
-	curl -X POST http://localhost:8081/crawl -H "Content-Type: application/json" -d '{"url": "https://example.com"}'
-	pkill -f "kubectl port-forward svc/crawler"
-
-test-rag: ## Test RAG API
-	@echo "Testing RAG API..."
-	kubectl port-forward svc/rag-api 8082:8080 -n rag &
-	sleep 2
-	curl -X POST http://localhost:8082/query -H "Content-Type: application/json" -d '{"query": "What is this about?"}'
-	pkill -f "kubectl port-forward svc/rag-api"
-
-clean: ## Clean up build artifacts
-	rm -rf bin/
-	docker image prune -f
 
 setup-openai: ## Setup OpenAI API key (requires OPENAI_API_KEY env var)
 	@if [ -z "$(OPENAI_API_KEY)" ]; then \
@@ -97,26 +93,14 @@ setup-openai: ## Setup OpenAI API key (requires OPENAI_API_KEY env var)
 		--from-literal=OPENAI_API_KEY=$(OPENAI_API_KEY) \
 		-n rag --dry-run=client -o yaml | kubectl apply -f -
 
-# Development targets
-dev-build: ## Build for development
-	@mkdir -p bin
-	@for service in $(SERVICES); do \
-		echo "Building $$service for development..."; \
-		cd cmd/$$service && go build -race -o ../../bin/$$service . && cd ../..; \
-	done
-
-dev-test: ## Run tests
-	go test ./...
-
-dev-lint: ## Run linter
-	golangci-lint run
-
-# Local development with Docker Compose (alternative to K8s)
-dev-up: ## Start services with Docker Compose
-	docker-compose up -d
-
-dev-down: ## Stop services with Docker Compose
+# Cleanup
+clean: ## Clean up Docker resources
 	docker-compose down -v
+	docker system prune -f
+
+# Development
+dev: ## Start services in development mode with auto-rebuild
+	docker-compose up --build
 
 # Default target
-all: build docker-build k8s-deploy
+all: build up
