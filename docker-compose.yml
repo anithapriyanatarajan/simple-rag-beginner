@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+
+  crawler:
+    build:
+      context: .
+      dockerfile: cmd/crawler/Dockerfile
+    ports:
+      - "8081:8080"
+    environment:
+      - PARSER_URL=http://parser:8080
+    depends_on:
+      - parser
+
+  parser:
+    build:
+      context: .
+      dockerfile: cmd/parser/Dockerfile
+    ports:
+      - "8082:8080"
+    environment:
+      - CHUNK_SIZE=2000
+      - EMBEDDER_URL=http://embedder:8080
+    depends_on:
+      - embedder
+
+  embedder:
+    build:
+      context: .
+      dockerfile: cmd/embedder/Dockerfile
+    ports:
+      - "8083:8080"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - QDRANT_URL=http://qdrant:6333
+      - VECTOR_DIM=1536
+    depends_on:
+      - qdrant
+
+  rag-api:
+    build:
+      context: .
+      dockerfile: cmd/rag-api/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - QDRANT_URL=http://qdrant:6333
+    depends_on:
+      - qdrant
+
+volumes:
+  qdrant_data:

@@ -1,76 +1,104 @@
 
 
-# Simple RAG Beginner
+# Kubernetes RAG Pipeline
 
-A minimal Go-based RAG chatbot using Qdrant for vector search.
+A production-ready, microservices-based Retrieval-Augmented Generation (RAG) system built with Go and deployed on Kubernetes.
 
 ---
 
-## Install & Run
+## Architecture
 
-### VM Mode (No Docker)
-1. Install Go 1.20+
-2. Download and run Qdrant manually ([Qdrant docs](https://qdrant.tech/documentation/quick-start/))
-3. Start API server:
+- **Crawler**: Scrapes web content using Colly
+- **Parser**: Extracts and chunks text using goquery  
+- **Embedder**: Generates embeddings via OpenAI API and stores in Qdrant
+- **RAG API**: Handles queries, retrieval, and LLM responses
+- **Qdrant**: Vector database (StatefulSet with persistent storage)
+
+---
+
+## Quick Start
+
+### Prerequisites
+- Kubernetes cluster
+- Docker
+- Go 1.23+
+- OpenAI API key
+
+### Deploy to Kubernetes
+
+1. **Setup OpenAI API key:**
    ```bash
-   go run cmd/main.go
+   export OPENAI_API_KEY="your-api-key-here"
+   make setup-openai
    ```
-4. Open [http://localhost:8080](http://localhost:8080) in your browser
 
-### Docker Mode (Recommended)
-1. Install Docker
-2. Run Qdrant setup script:
+2. **Build and deploy:**
    ```bash
-   ./scripts/setup-qdrant.sh
+   make docker-build
+   make k8s-deploy
    ```
-3. Start API server:
+
+3. **Test the pipeline:**
    ```bash
-   go run cmd/main.go
+   # Test crawler
+   make test-crawl
+   
+   # Test RAG API
+   make test-rag
    ```
-4. Open [http://localhost:8080](http://localhost:8080)
+
+### Local Development
+
+1. **Docker Compose:**
+   ```bash
+   export OPENAI_API_KEY="your-api-key-here"
+   make dev-up
+   ```
+
+2. **Test locally:**
+   ```bash
+   # Crawl a website
+   curl -X POST http://localhost:8081/crawl -H "Content-Type: application/json" -d '{"url": "https://example.com"}'
+   
+   # Query the RAG system
+   curl -X POST http://localhost:8080/query -H "Content-Type: application/json" -d '{"query": "What is this about?"}'
+   ```
 
 ---
 
-## Test
+## Pipeline Flow
 
-- **Web UI:** Use browser at [http://localhost:8080](http://localhost:8080)
-- **API:**
-  ```bash
-  curl -X POST http://localhost:8080/query -H "Content-Type: application/json" -d '{"query": "hello"}'
-  ```
-- **CLI:**
-  ```bash
-  go run cmd/main.go cli
-  ```
+1. **Crawl** → POST `/crawl` with `{"url": "..."}`
+2. **Parse** → Automatically triggered, chunks text  
+3. **Embed** → Automatically triggered, generates embeddings and stores in Qdrant
+4. **Query** → POST `/query` with `{"query": "..."}` returns AI response with sources
 
 ---
 
-## Troubleshoot & Cleanup
+## Management
 
-- **Stop all & cleanup:**
-  ```bash
-  ./scripts/cleanup.sh
-  ```
-- **Restart Qdrant only:**
-  ```bash
-  docker restart qdrant-rag
-  ```
-- **View Qdrant logs:**
-  ```bash
-  docker logs qdrant-rag
-  ```
-- **Check port usage:**
-  ```bash
-  lsof -i :8080
-  ```
+- **View status:** `make k8s-status`
+- **View logs:** `make k8s-logs`  
+- **Cleanup:** `make k8s-undeploy`
+- **Build only:** `make build`
 
 ---
 
-## Notes
+## Configuration
 
-- Default ports: 8080 (API), 6333 (Qdrant HTTP)
-- Embedding/model logic is a stub; replace for production
-- See `PROJECT_STRUCTURE.md` for file details
+- Qdrant: 50Gi PVC, cosine similarity
+- Embeddings: OpenAI Ada v2 (1536 dimensions)
+- Chunking: ~2000 chars, sentence-aware
+- LLM: GPT-3.5-turbo for responses
+
+---
+
+## Files
+
+- `cmd/*/`: Microservice source code
+- `deploy/k8s/`: Kubernetes manifests
+- `Makefile`: Build and deployment automation
+- `docker-compose.yml`: Local development stack
 
 ### 2. Start the RAG Application
 

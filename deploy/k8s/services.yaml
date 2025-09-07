@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crawler
+  namespace: rag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crawler
+  template:
+    metadata:
+      labels:
+        app: crawler
+    spec:
+      containers:
+      - name: crawler
+        image: rag/crawler:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: TARGET_SITE
+          valueFrom:
+            configMapKeyRef:
+              name: rag-config
+              key: TARGET_SITE
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: crawler
+  namespace: rag
+spec:
+  selector:
+    app: crawler
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: parser
+  namespace: rag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: parser
+  template:
+    metadata:
+      labels:
+        app: parser
+    spec:
+      containers:
+      - name: parser
+        image: rag/parser:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: CHUNK_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: rag-config
+              key: CHUNK_SIZE
+        - name: EMBEDDER_URL
+          value: "http://embedder:8080"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: parser
+  namespace: rag
+spec:
+  selector:
+    app: parser
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
