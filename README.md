@@ -1,63 +1,76 @@
+
+
 # Simple RAG Beginner
 
-A Go-based Retrieval-Augmented Generation (RAG) chatbot prototype with real vector database integration.
+A minimal Go-based RAG chatbot using Qdrant for vector search.
 
-## ✨ Features
+---
 
-- **🔍 Vector Search**: Real semantic search using Qdrant vector database
-- **🌐 REST API**: JSON endpoints for query processing
-- **💬 Web Chat UI**: Interactive browser-based chat interface  
-- **⚡ Auto Setup**: One-command Qdrant deployment with Docker
-- **🛡️ Robust**: Automatic fallback mechanisms for reliability
-- **📊 Monitoring**: Built-in logging and Qdrant web dashboard
+## Install & Run
 
-## 🏗️ Architecture
+### VM Mode (No Docker)
+1. Install Go 1.20+
+2. Download and run Qdrant manually ([Qdrant docs](https://qdrant.tech/documentation/quick-start/))
+3. Start API server:
+   ```bash
+   go run cmd/main.go
+   ```
+4. Open [http://localhost:8080](http://localhost:8080) in your browser
 
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Web Frontend  │────│   Go REST API    │────│   Qdrant DB     │
-│   (Chat UI)     │    │   (RAG Logic)    │    │  (Vectors)      │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-```
+### Docker Mode (Recommended)
+1. Install Docker
+2. Run Qdrant setup script:
+   ```bash
+   ./scripts/setup-qdrant.sh
+   ```
+3. Start API server:
+   ```bash
+   go run cmd/main.go
+   ```
+4. Open [http://localhost:8080](http://localhost:8080)
 
-**Core Components:**
-- `cmd/main.go` — Application entry point (API server & CLI modes)
-- `internal/api/` — REST endpoints and static file serving
-- `internal/rag/` — RAG orchestration logic
-- `internal/vectordb/` — Qdrant vector database client
-- `internal/embedding/` — Text-to-vector conversion (8D stub)
-- `internal/model/` — AI response generation (stub)
-- `web/index.html` — Interactive chat interface
-- `scripts/setup-qdrant.sh` — Automated Qdrant deployment
-- `scripts/cleanup.sh` — Complete project cleanup and shutdown
+---
 
-> 📋 **Detailed Structure**: See [`PROJECT_STRUCTURE.md`](PROJECT_STRUCTURE.md) for comprehensive architecture documentation, file descriptions, and maintenance guidelines.
+## Test
 
-## 🚀 Quick Start
+- **Web UI:** Use browser at [http://localhost:8080](http://localhost:8080)
+- **API:**
+  ```bash
+  curl -X POST http://localhost:8080/query -H "Content-Type: application/json" -d '{"query": "hello"}'
+  ```
+- **CLI:**
+  ```bash
+  go run cmd/main.go cli
+  ```
 
-### Prerequisites
-- **Go 1.20+** 
-- **Docker** (for Qdrant vector database)
+---
 
-### 1. Setup Vector Database
+## Troubleshoot & Cleanup
 
-```bash
-./scripts/setup-qdrant.sh
-```
+- **Stop all & cleanup:**
+  ```bash
+  ./scripts/cleanup.sh
+  ```
+- **Restart Qdrant only:**
+  ```bash
+  docker restart qdrant-rag
+  ```
+- **View Qdrant logs:**
+  ```bash
+  docker logs qdrant-rag
+  ```
+- **Check port usage:**
+  ```bash
+  lsof -i :8080
+  ```
 
-This automated script:
-- ✅ Pulls latest Qdrant Docker image
-- ✅ Starts Qdrant container with optimal configuration  
-- ✅ Attempts persistent storage, falls back to Docker volume if needed
-- ✅ Validates Qdrant is responding correctly
+---
 
-**Output Example:**
-```
-🚀 Setting up Qdrant Vector Database...
-✅ Qdrant is running and responding!
-🌐 Web UI available at: http://localhost:6333/dashboard
-📁 Data storage: Docker internal volume
-```
+## Notes
+
+- Default ports: 8080 (API), 6333 (Qdrant HTTP)
+- Embedding/model logic is a stub; replace for production
+- See `PROJECT_STRUCTURE.md` for file details
 
 ### 2. Start the RAG Application
 
