@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -85,11 +85,12 @@ func parseHandler(w http.ResponseWriter, r *http.Request) {
 
 	chunks := chunkText(text, chunkSize)
 
-	// Create chunks with deterministic IDs
+	// Create chunks with UUID-based IDs for Qdrant compatibility
 	var enrichedChunks []map[string]interface{}
 	for i, chunk := range chunks {
+		chunkID := uuid.New().String()
 		enrichedChunks = append(enrichedChunks, map[string]interface{}{
-			"id":      fmt.Sprintf("%s#chunk-%d", req.URL, i),
+			"id":      chunkID,
 			"url":     req.URL,
 			"title":   req.Title,
 			"content": chunk,

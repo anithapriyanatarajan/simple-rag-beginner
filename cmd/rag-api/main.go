@@ -71,7 +71,8 @@ func queryHandler(c *gin.Context) {
 	}()
 
 	var req struct {
-		Query string `json:"query"`
+		Query      string `json:"query"`
+		Collection string `json:"collection"`
 	}
 
 	if err := c.BindJSON(&req); err != nil {
@@ -104,7 +105,11 @@ func queryHandler(c *gin.Context) {
 	}
 
 	// 2. Search Qdrant for top-k similar chunks
-	results, err := searchQdrant(embedding, appConfig.TopK)
+	collection := req.Collection
+	if collection == "" {
+		collection = "documents"
+	}
+	results, err := searchQdrant(embedding, appConfig.TopK, collection)
 	if err != nil {
 		requestCounter.WithLabelValues("error").Inc()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to search: %v", err)})
@@ -229,10 +234,14 @@ Answer:`, query)
 	return llmProvider.GenerateResponse(context.Background(), prompt, appConfig)
 }
 
-func searchQdrant(embedding []float32, topK int) ([]map[string]interface{}, error) {
+func searchQdrant(embedding []float32, topK int, collection string) ([]map[string]interface{}, error) {
 	qdrantURL := os.Getenv("QDRANT_URL")
 	if qdrantURL == "" {
 		qdrantURL = "http://qdrant:6333"
+	}
+
+	if collection == "" {
+		collection = "documents"
 	}
 
 	searchPayload := map[string]interface{}{
@@ -242,7 +251,7 @@ func searchQdrant(embedding []float32, topK int) ([]map[string]interface{}, erro
 	}
 
 	searchData, _ := json.Marshal(searchPayload)
-	resp, err := http.Post(qdrantURL+"/collections/documents/points/search", "application/json", bytes.NewBuffer(searchData))
+	resp, err := http.Post(qdrantURL+"/collections/"+collection+"/points/search", "application/json", bytes.NewBuffer(searchData))
 	if err != nil {
 		return nil, err
 	}
@@ -279,8 +288,9 @@ func crawlAndQueryHandler(c *gin.Context) {
 	}()
 
 	var req struct {
-		URL   string `json:"url"`
-		Query string `json:"query"`
+		URL        string `json:"url"`
+		Query      string `json:"query"`
+		Collection string `json:"collection"`
 	}
 
 	if err := c.BindJSON(&req); err != nil {
@@ -295,7 +305,15 @@ func crawlAndQueryHandler(c *gin.Context) {
 		crawlerURL = "http://crawler:8080"
 	}
 
-	crawlPayload := map[string]string{"url": req.URL}
+	collection := req.Collection
+	if collection == "" {
+		collection = "documents"
+	}
+
+	crawlPayload := map[string]string{
+		"url":        req.URL,
+		"collection": collection,
+	}
 	crawlData, _ := json.Marshal(crawlPayload)
 
 	resp, err := http.Post(crawlerURL+"/crawl", "application/json", bytes.NewBuffer(crawlData))
@@ -334,7 +352,7 @@ func crawlAndQueryHandler(c *gin.Context) {
 	}
 
 	// Search Qdrant for relevant chunks
-	results, err := searchQdrant(embedding, appConfig.TopK)
+	results, err := searchQdrant(embedding, appConfig.TopK, collection)
 	if err != nil {
 		requestCounter.WithLabelValues("error").Inc()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to search: %v", err)})
