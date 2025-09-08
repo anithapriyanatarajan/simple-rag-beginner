@@ -1,7 +1,0 @@
-# Helm Chart for RAG Pipeline
-apiVersion: v2
-name: rag-pipeline
-description: A Kubernetes RAG pipeline with microservices
-type: application
-version: 0.1.0
-appVersion: "1.0"

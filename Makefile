@@ -6,7 +6,7 @@ TAG ?= latest
 # Service names
 SERVICES = crawler parser embedder rag-api
 
-.PHONY: help build docker-build docker-push k8s-deploy k8s-undeploy clean
+.PHONY: help build docker-build docker-push k8s-deploy k8s-undeploy clean config-check
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
@@ -20,6 +20,9 @@ down: ## Stop all services with Docker Compose
 
 build: ## Build all Docker images
 	docker-compose build
+
+build-ko: ## Build container images with Ko
+	./build-ko.sh
 
 restart: ## Restart all services
 	docker-compose restart
@@ -59,29 +62,52 @@ health: ## Check service health
 	@echo "Checking Qdrant health..."
 	curl -s http://localhost:6333/health | jq .
 
-# Kubernetes targets (Optional)
-k8s-deploy: docker-build ## Deploy to Kubernetes
-	@echo "Deploying to Kubernetes..."
-	kubectl apply -f deploy/k8s/qdrant.yaml
-	kubectl apply -f deploy/k8s/services.yaml
-	kubectl apply -f deploy/k8s/api.yaml
-	@echo "Waiting for deployments to be ready..."
-	kubectl wait --for=condition=available --timeout=300s deployment/crawler -n rag
-	kubectl wait --for=condition=available --timeout=300s deployment/parser -n rag
-	kubectl wait --for=condition=available --timeout=300s deployment/embedder -n rag
-	kubectl wait --for=condition=available --timeout=300s deployment/rag-api -n rag
-	kubectl wait --for=condition=ready --timeout=300s statefulset/qdrant -n rag
+config-check: ## Check current provider configuration
+	@echo "Current RAG API configuration:"
+	curl -s http://localhost:8080/config | jq .
 
-k8s-undeploy: ## Remove from Kubernetes
-	@echo "Removing from Kubernetes..."
-	kubectl delete -f deploy/k8s/api.yaml --ignore-not-found
+config-demo: ## Demo different provider configurations
+	@echo "Testing OpenAI configuration:"
+	cd cmd/rag-api && LLM_PROVIDER=openai EMBEDDING_PROVIDER=openai timeout 2s go run . 2>&1 | grep "rag-api service started"
+	@echo "Testing Ollama configuration:"
+	cd cmd/rag-api && LLM_PROVIDER=ollama EMBEDDING_PROVIDER=ollama timeout 2s go run . 2>&1 | grep "rag-api service started" || true
+	@echo "Testing Mixed configuration (OpenAI LLM + Cohere Embedding):"
+	cd cmd/rag-api && LLM_PROVIDER=openai EMBEDDING_PROVIDER=cohere timeout 2s go run . 2>&1 | grep "rag-api service started" || true
+
+# Kubernetes targets (Kind cluster)
+kind-setup: ## Setup Kind cluster with Ko
+	./setup-kind.sh
+
+kind-deploy: ## Deploy to existing Kind cluster with Ko
+	@echo "🚀 Deploying to Kind cluster with Ko..."
+	export KO_DOCKER_REPO=kind.local && ko apply -f deploy/k8s/
+
+kind-undeploy: ## Remove from Kind cluster
+	@echo "🗑️  Removing from Kind cluster..."
 	kubectl delete -f deploy/k8s/services.yaml --ignore-not-found
 	kubectl delete -f deploy/k8s/qdrant.yaml --ignore-not-found
 	kubectl delete namespace rag --ignore-not-found
 
-k8s-status: ## Show Kubernetes status
+kind-destroy: ## Destroy Kind cluster
+	kind delete cluster --name rag-cluster
+
+kind-status: ## Show Kind cluster status
 	kubectl get all -n rag
 	kubectl get pvc -n rag
+
+kind-logs: ## Show logs from Kind cluster
+	kubectl logs -f deployment/rag-api -n rag
+
+test-kind: ## Test RAG system on Kind cluster
+	@echo "Testing RAG on Kind cluster..."
+	curl -X POST http://localhost:8080/query \
+		-H "Content-Type: application/json" \
+		-d '{"query": "What is Tekton?"}'
+
+# Legacy Kubernetes targets (Generic)
+k8s-deploy: kind-deploy ## Alias for kind-deploy
+k8s-undeploy: kind-undeploy ## Alias for kind-undeploy
+k8s-status: kind-status ## Alias for kind-status
 
 setup-openai: ## Setup OpenAI API key (requires OPENAI_API_KEY env var)
 	@if [ -z "$(OPENAI_API_KEY)" ]; then \

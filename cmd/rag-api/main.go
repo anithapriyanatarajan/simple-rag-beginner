@@ -8,12 +8,14 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"simple-rag-beginner/cmd/rag-api/config"
+	"simple-rag-beginner/cmd/rag-api/providers"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/sashabaranov/go-openai"
 )
 
 var (
@@ -25,6 +27,7 @@ var (
 		prometheus.HistogramOpts{Name: "rag_api_request_duration_seconds"},
 		[]string{"endpoint"},
 	)
+	appConfig *config.Config
 )
 
 func init() {
@@ -34,13 +37,23 @@ func init() {
 func main() {
 	log.SetFlags(0)
 	log.SetOutput(os.Stdout)
-	log.Println(`{"level":"info","msg":"rag-api service started","port":8080}`)
+
+	// Load configuration
+	appConfig = config.LoadConfig()
+	if err := appConfig.Validate(); err != nil {
+		log.Printf(`{"level":"warn","msg":"Configuration validation failed","error":"%s"}`, err.Error())
+		log.Println(`{"level":"info","msg":"Continuing with current configuration - some features may not work"}`)
+	}
+
+	log.Printf(`{"level":"info","msg":"rag-api service started","port":8080,"llm_provider":"%s","embedding_provider":"%s"}`,
+		appConfig.LLMProvider, appConfig.EmbeddingProvider)
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 
 	// Serve web interface
 	r.GET("/", webHandler)
+	r.GET("/config", configHandler)
 
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	r.GET("/health", healthHandler)
@@ -67,17 +80,23 @@ func queryHandler(c *gin.Context) {
 		return
 	}
 
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
+	// Initialize providers
+	embeddingProvider, err := providers.NewEmbeddingProvider(appConfig)
+	if err != nil {
 		requestCounter.WithLabelValues("error").Inc()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "OpenAI API key not configured"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to initialize embedding provider: %v", err)})
 		return
 	}
 
-	client := openai.NewClient(apiKey)
+	llmProvider, err := providers.NewLLMProvider(appConfig)
+	if err != nil {
+		requestCounter.WithLabelValues("error").Inc()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to initialize LLM provider: %v", err)})
+		return
+	}
 
 	// 1. Get query embedding
-	embedding, err := getQueryEmbedding(client, req.Query)
+	embedding, err := embeddingProvider.GenerateEmbedding(context.Background(), req.Query, appConfig)
 	if err != nil {
 		requestCounter.WithLabelValues("error").Inc()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to embed query: %v", err)})
@@ -85,15 +104,15 @@ func queryHandler(c *gin.Context) {
 	}
 
 	// 2. Search Qdrant for top-k similar chunks
-	results, err := searchQdrant(embedding, 5)
+	results, err := searchQdrant(embedding, appConfig.TopK)
 	if err != nil {
 		requestCounter.WithLabelValues("error").Inc()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to search: %v", err)})
 		return
 	}
 
-	// 3. Assemble context and call LLM
-	response, sources, err := generateResponse(client, req.Query, results)
+	// 3. Generate response using configured LLM
+	response, sources, err := generateResponseWithProvider(llmProvider, req.Query, results)
 	if err != nil {
 		requestCounter.WithLabelValues("error").Inc()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to generate response: %v", err)})
@@ -102,9 +121,12 @@ func queryHandler(c *gin.Context) {
 
 	requestCounter.WithLabelValues("success").Inc()
 	c.JSON(http.StatusOK, gin.H{
-		"response": response,
-		"sources":  sources,
-		"query":    req.Query,
+		"response":                response,
+		"sources":                 sources,
+		"query":                   req.Query,
+		"llm_provider":            string(appConfig.LLMProvider),
+		"embedding_provider":      string(appConfig.EmbeddingProvider),
+		"processing_time_seconds": time.Since(start).Seconds(),
 	})
 }
 
@@ -124,17 +146,16 @@ func directQueryHandler(c *gin.Context) {
 		return
 	}
 
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
+	// Initialize LLM provider
+	llmProvider, err := providers.NewLLMProvider(appConfig)
+	if err != nil {
 		requestCounter.WithLabelValues("error").Inc()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "OpenAI API key not configured"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to initialize LLM provider: %v", err)})
 		return
 	}
 
-	client := openai.NewClient(apiKey)
-
 	// Direct LLM call without any vector DB retrieval
-	response, err := generateDirectResponse(client, req.Query)
+	response, err := generateDirectResponseWithProvider(llmProvider, req.Query)
 	if err != nil {
 		requestCounter.WithLabelValues("error").Inc()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to generate response: %v", err)})
@@ -147,24 +168,65 @@ func directQueryHandler(c *gin.Context) {
 		"sources":                 []string{}, // No sources for direct queries
 		"query":                   req.Query,
 		"mode":                    "direct",
+		"llm_provider":            string(appConfig.LLMProvider),
 		"processing_time_seconds": time.Since(start).Seconds(),
 	})
 }
 
-func getQueryEmbedding(client *openai.Client, query string) ([]float32, error) {
-	resp, err := client.CreateEmbeddings(context.Background(), openai.EmbeddingRequest{
-		Input: []string{query},
-		Model: openai.AdaEmbeddingV2,
+func configHandler(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"llm_provider":         string(appConfig.LLMProvider),
+		"embedding_provider":   string(appConfig.EmbeddingProvider),
+		"llm_model":            appConfig.LLMModel,
+		"embedding_model":      appConfig.EmbeddingModel,
+		"top_k":                appConfig.TopK,
+		"llm_max_tokens":       appConfig.LLMMaxTokens,
+		"llm_temperature":      appConfig.LLMTemperature,
+		"qdrant_url":           appConfig.QdrantURL,
+		"chunk_size":           appConfig.ChunkSize,
+		"embedding_dimensions": appConfig.EmbeddingDimensions,
 	})
-	if err != nil {
-		return nil, err
+}
+
+func generateResponseWithProvider(llmProvider providers.LLMProvider, query string, contextResults []map[string]interface{}) (string, []string, error) {
+	// Build context from search results
+	var contextTexts []string
+	var sources []string
+
+	for _, result := range contextResults {
+		if payload, ok := result["payload"].(map[string]interface{}); ok {
+			if text, ok := payload["text"].(string); ok {
+				contextTexts = append(contextTexts, text)
+			}
+			if source, ok := payload["source"].(string); ok {
+				sources = append(sources, source)
+			}
+		}
 	}
 
-	if len(resp.Data) == 0 {
-		return nil, fmt.Errorf("no embedding returned")
-	}
+	contextString := strings.Join(contextTexts, "\n\n")
 
-	return resp.Data[0].Embedding, nil
+	prompt := fmt.Sprintf(`Based on the following context, answer the question. If the answer cannot be found in the context, say so.
+
+Context:
+%s
+
+Question: %s
+
+Answer:`, contextString, query)
+
+	response, err := llmProvider.GenerateResponse(context.Background(), prompt, appConfig)
+	return response, sources, err
+}
+
+func generateDirectResponseWithProvider(llmProvider providers.LLMProvider, query string) (string, error) {
+	prompt := fmt.Sprintf(`Please answer the following question directly:
+
+Question: %s
+
+Answer:`, query)
+
+	return llmProvider.GenerateResponse(context.Background(), prompt, appConfig)
 }
 
 func searchQdrant(embedding []float32, topK int) ([]map[string]interface{}, error) {
@@ -204,75 +266,6 @@ func searchQdrant(embedding []float32, topK int) ([]map[string]interface{}, erro
 	}
 
 	return results, nil
-}
-
-func generateResponse(client *openai.Client, query string, contextResults []map[string]interface{}) (string, []string, error) {
-	var contextTexts []string
-	var sources []string
-
-	for _, item := range contextResults {
-		if content, ok := item["content"].(string); ok {
-			contextTexts = append(contextTexts, content)
-		}
-		if url, ok := item["url"].(string); ok {
-			sources = append(sources, url)
-		}
-	}
-
-	prompt := fmt.Sprintf(`Answer the question based on the provided context. Be concise and accurate.
-
-Context:
-%s
-
-Question: %s
-
-Answer:`, fmt.Sprintf("- %s", contextTexts), query)
-
-	resp, err := client.CreateChatCompletion(context.Background(), openai.ChatCompletionRequest{
-		Model: openai.GPT3Dot5Turbo,
-		Messages: []openai.ChatCompletionMessage{
-			{Role: openai.ChatMessageRoleUser, Content: prompt},
-		},
-		MaxTokens:   500,
-		Temperature: 0.7,
-	})
-
-	if err != nil {
-		return "", nil, err
-	}
-
-	if len(resp.Choices) == 0 {
-		return "", nil, fmt.Errorf("no response generated")
-	}
-
-	return resp.Choices[0].Message.Content, sources, nil
-}
-
-func generateDirectResponse(client *openai.Client, query string) (string, error) {
-	prompt := fmt.Sprintf(`Answer the following question directly based on your training data. Be concise and accurate.
-
-Question: %s
-
-Answer:`, query)
-
-	resp, err := client.CreateChatCompletion(context.Background(), openai.ChatCompletionRequest{
-		Model: openai.GPT3Dot5Turbo,
-		Messages: []openai.ChatCompletionMessage{
-			{Role: openai.ChatMessageRoleUser, Content: prompt},
-		},
-		MaxTokens:   500,
-		Temperature: 0.7,
-	})
-
-	if err != nil {
-		return "", err
-	}
-
-	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("no response generated")
-	}
-
-	return resp.Choices[0].Message.Content, nil
 }
 
 func healthHandler(c *gin.Context) {
@@ -317,17 +310,23 @@ func crawlAndQueryHandler(c *gin.Context) {
 	time.Sleep(30 * time.Second)
 
 	// Step 3: Query the processed data
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
+	// Initialize providers
+	embeddingProvider, err := providers.NewEmbeddingProvider(appConfig)
+	if err != nil {
 		requestCounter.WithLabelValues("error").Inc()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "OpenAI API key not configured"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to initialize embedding provider: %v", err)})
 		return
 	}
 
-	client := openai.NewClient(apiKey)
+	llmProvider, err := providers.NewLLMProvider(appConfig)
+	if err != nil {
+		requestCounter.WithLabelValues("error").Inc()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to initialize LLM provider: %v", err)})
+		return
+	}
 
 	// Get query embedding
-	embedding, err := getQueryEmbedding(client, req.Query)
+	embedding, err := embeddingProvider.GenerateEmbedding(context.Background(), req.Query, appConfig)
 	if err != nil {
 		requestCounter.WithLabelValues("error").Inc()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to embed query: %v", err)})
@@ -335,7 +334,7 @@ func crawlAndQueryHandler(c *gin.Context) {
 	}
 
 	// Search Qdrant for relevant chunks
-	results, err := searchQdrant(embedding, 5)
+	results, err := searchQdrant(embedding, appConfig.TopK)
 	if err != nil {
 		requestCounter.WithLabelValues("error").Inc()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to search: %v", err)})
@@ -343,7 +342,7 @@ func crawlAndQueryHandler(c *gin.Context) {
 	}
 
 	// Generate response
-	response, sources, err := generateResponse(client, req.Query, results)
+	response, sources, err := generateResponseWithProvider(llmProvider, req.Query, results)
 	if err != nil {
 		requestCounter.WithLabelValues("error").Inc()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to generate response: %v", err)})

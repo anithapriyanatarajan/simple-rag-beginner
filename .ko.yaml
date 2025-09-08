@@ -1,0 +1,43 @@
+# Ko configuration for building and deploying Go apps to Kubernetes
+# This replaces traditional Dockerfiles with direct Go->container builds
+
+baseImageOverrides:
+  cmd/crawler: cgr.dev/chainguard/static:latest
+  cmd/parser: cgr.dev/chainguard/static:latest  
+  cmd/embedder: cgr.dev/chainguard/static:latest
+  cmd/rag-api: cgr.dev/chainguard/static:latest
+
+# Build settings
+builds:
+  - id: crawler
+    main: ./cmd/crawler
+    env:
+      - CGO_ENABLED=0
+      - GOOS=linux
+      - GOARCH=amd64
+  - id: parser
+    main: ./cmd/parser  
+    env:
+      - CGO_ENABLED=0
+      - GOOS=linux
+      - GOARCH=amd64
+  - id: embedder
+    main: ./cmd/embedder
+    env:
+      - CGO_ENABLED=0
+      - GOOS=linux
+      - GOARCH=amd64
+  - id: rag-api
+    main: ./cmd/rag-api
+    env:
+      - CGO_ENABLED=0
+      - GOOS=linux
+      - GOARCH=amd64
+
+# Default settings
+defaultPlatforms:
+  - linux/amd64
+  - linux/arm64
+
+# Registry settings (will be overridden by KO_DOCKER_REPO)
+repo: ko.local

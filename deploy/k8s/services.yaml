@@ -1,3 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rag
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,15 +20,12 @@ spec:
     spec:
       containers:
       - name: crawler
-        image: rag/crawler:latest
+        image: ko://github.com/anithapriyanatarajan/simple-rag-beginner/cmd/crawler
         ports:
         - containerPort: 8080
         env:
-        - name: TARGET_SITE
-          valueFrom:
-            configMapKeyRef:
-              name: rag-config
-              key: TARGET_SITE
+        - name: PARSER_URL
+          value: "http://parser:8080"
         resources:
           requests:
             memory: "256Mi"
@@ -62,15 +64,12 @@ spec:
     spec:
       containers:
       - name: parser
-        image: rag/parser:latest
+        image: ko://github.com/anithapriyanatarajan/simple-rag-beginner/cmd/parser
         ports:
         - containerPort: 8080
         env:
         - name: CHUNK_SIZE
-          valueFrom:
-            configMapKeyRef:
-              name: rag-config
-              key: CHUNK_SIZE
+          value: "2000"
         - name: EMBEDDER_URL
           value: "http://embedder:8080"
         resources:
@@ -93,3 +92,117 @@ spec:
   - port: 8080
     targetPort: 8080
   type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embedder
+  namespace: rag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: embedder
+  template:
+    metadata:
+      labels:
+        app: embedder
+    spec:
+      containers:
+      - name: embedder
+        image: ko://github.com/anithapriyanatarajan/simple-rag-beginner/cmd/embedder
+        ports:
+        - containerPort: 8080
+        env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: openai-secret
+              key: OPENAI_API_KEY
+        - name: QDRANT_URL
+          value: "http://qdrant:6333"
+        - name: VECTOR_DIM
+          value: "1536"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: embedder
+  namespace: rag
+spec:
+  selector:
+    app: embedder
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-api
+  namespace: rag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rag-api
+  template:
+    metadata:
+      labels:
+        app: rag-api
+    spec:
+      containers:
+      - name: rag-api
+        image: ko://github.com/anithapriyanatarajan/simple-rag-beginner/cmd/rag-api
+        ports:
+        - containerPort: 8080
+        env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: openai-secret
+              key: OPENAI_API_KEY
+        - name: QDRANT_URL
+          value: "http://qdrant:6333"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-api
+  namespace: rag
+spec:
+  selector:
+    app: rag-api
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-api-external
+  namespace: rag
+spec:
+  selector:
+    app: rag-api
+  ports:
+  - port: 8080
+    targetPort: 8080
+    nodePort: 30080
+  type: NodePort

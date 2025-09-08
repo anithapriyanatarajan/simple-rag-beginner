@@ -53,8 +53,30 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # LLM Configuration
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_MODEL=${LLM_MODEL:-gpt-3.5-turbo}
+      - LLM_API_KEY=${LLM_API_KEY:-${OPENAI_API_KEY}}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-500}
+      - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.7}
+      
+      # Embedding Configuration
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-openai}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-ada-002}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-${OPENAI_API_KEY}}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-}
+      - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS:-1536}
+      
+      # Vector DB Configuration
       - QDRANT_URL=http://qdrant:6333
+      
+      # Processing Configuration
+      - CHUNK_SIZE=${CHUNK_SIZE:-2000}
+      - TOP_K=${TOP_K:-5}
+      
+      # Legacy support
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
       - qdrant
 

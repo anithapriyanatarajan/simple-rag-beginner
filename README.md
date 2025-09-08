@@ -2,17 +2,33 @@
 
 # RAG Microservices Pipeline
 
-A production-ready Retrieval-Augmented Generation (RAG) system built with Go microservices and Docker Compose.
+A production-ready, configurable Retrieval-Augmented Generation (RAG) system built with Go microservices. Supports multiple LLM and embedding providers for flexibility and cost optimization.
+
+## ✨ Features
+
+- **Multi-Provider Support**: OpenAI, Ollama, Anthropic, Cohere, Azure OpenAI
+- **RAG vs Direct Comparison**: Compare responses with and without vector retrieval
+- **Clean Configuration**: Environment-based provider switching
+- **Production Ready**: Kubernetes deployment with Kind + Ko
+- **Comprehensive Monitoring**: Prometheus metrics and health checks
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Docker & Docker Compose
-- OpenAI API key
+- API key for your chosen provider (OpenAI by default)
 
 ### 1. Setup Environment
 ```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Edit with your API keys
 export OPENAI_API_KEY="your-api-key-here"
+
+# Optional: Configure different providers
+export LLM_PROVIDER="openai"        # openai, ollama, anthropic, cohere, azure
+export EMBEDDING_PROVIDER="openai"  # openai, cohere, huggingface, ollama, azure
 ```
 
 ### 2. Start Services
@@ -24,7 +40,42 @@ make up
 - **Web UI**: http://localhost:8080
 - **RAG API**: http://localhost:8080/query
 - **Direct LLM**: http://localhost:8080/query-direct
+- **Configuration**: http://localhost:8080/config
 - **Qdrant Dashboard**: http://localhost:6333/dashboard
+
+## ⚙️ Provider Configuration
+
+### OpenAI (Default)
+```bash
+LLM_PROVIDER=openai
+LLM_MODEL=gpt-3.5-turbo
+OPENAI_API_KEY=your_key_here
+```
+
+### Ollama (Local/Privacy-focused)
+```bash
+LLM_PROVIDER=ollama
+LLM_MODEL=llama2
+LLM_BASE_URL=http://localhost:11434
+EMBEDDING_PROVIDER=ollama
+EMBEDDING_MODEL=nomic-embed-text
+```
+
+### Anthropic Claude
+```bash
+LLM_PROVIDER=anthropic
+LLM_MODEL=claude-3-sonnet-20240229
+LLM_API_KEY=your_anthropic_key
+```
+
+### Cohere
+```bash
+LLM_PROVIDER=cohere
+LLM_MODEL=command
+LLM_API_KEY=your_cohere_key
+EMBEDDING_PROVIDER=cohere
+EMBEDDING_MODEL=embed-english-v3.0
+```
 
 ## 🏗️ Architecture
 
@@ -33,7 +84,7 @@ Web Scraping → Text Processing → Vector Embeddings → Query & Response
     ↓              ↓                 ↓                    ↓
   Crawler      →  Parser        →  Embedder         →  RAG API
     ↓              ↓                 ↓                    ↓
- Colly            goquery        OpenAI API         Gin + OpenAI
+ Colly            goquery      Provider APIs        Gin + Providers
                                      ↓
                                   Qdrant Vector DB
 ```
@@ -41,8 +92,8 @@ Web Scraping → Text Processing → Vector Embeddings → Query & Response
 ### Services
 - **Crawler** (`:8081`): Web scraping with Colly
 - **Parser** (`:8082`): HTML parsing and text chunking  
-- **Embedder** (`:8083`): OpenAI embeddings + Qdrant storage
-- **RAG API** (`:8080`): Query interface with web UI
+- **Embedder** (`:8083`): Configurable embeddings + Qdrant storage
+- **RAG API** (`:8080`): Multi-provider query interface with web UI
 - **Qdrant** (`:6333`): Vector database
 
 ## 🧪 Testing
@@ -109,11 +160,44 @@ make clean          # Clean up resources
 3. **Knowledge Base**: Build searchable knowledge from web content
 4. **Research Tool**: Extract insights from multiple web sources
 
-## 🚀 Kubernetes Deployment
+## 🚀 Kubernetes Deployment (Kind + Ko)
 
-For production Kubernetes deployment:
+For local Kubernetes testing with Kind cluster:
+
+### Prerequisites
+- [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/) 
+- [Ko](https://ko.build/install/)
+- kubectl
+
+### Quick Setup
 ```bash
-make k8s-deploy
+# Setup everything in one command
+export OPENAI_API_KEY="your-api-key-here"
+make kind-setup
+```
+
+### Manual Steps
+```bash
+# 1. Setup Kind cluster
+./setup-kind.sh
+
+# 2. Deploy services
+make kind-deploy
+
+# 3. Test the system
+make test-kind
+
+# 4. Access services
+# Web UI: http://localhost:8080
+# Qdrant: http://localhost:6333/dashboard
+```
+
+### Kind Management
+```bash
+make kind-status      # Check cluster status
+make kind-logs        # View API logs
+make kind-undeploy    # Remove services
+make kind-destroy     # Delete cluster
 ```
 
 ## 📁 Project Structure
