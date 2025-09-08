@@ -70,6 +70,8 @@ func queryHandler(c *gin.Context) {
 		requestDuration.WithLabelValues("query").Observe(time.Since(start).Seconds())
 	}()
 
+	log.Printf("DEBUG: Query handler called")
+
 	var req struct {
 		Query      string `json:"query"`
 		Collection string `json:"collection"`
@@ -104,6 +106,9 @@ func queryHandler(c *gin.Context) {
 		return
 	}
 
+	// Debug: log embedding info
+	log.Printf(`{"level":"debug","msg":"Generated embedding","query":"%s","embedding_length":%d}`, req.Query, len(embedding))
+
 	// 2. Search Qdrant for top-k similar chunks
 	collection := req.Collection
 	if collection == "" {
@@ -115,6 +120,9 @@ func queryHandler(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to search: %v", err)})
 		return
 	}
+
+	// Debug: log search results
+	log.Printf(`{"level":"debug","msg":"Search results","collection":"%s","results_count":%d}`, collection, len(results))
 
 	// 3. Generate response using configured LLM
 	response, sources, err := generateResponseWithProvider(llmProvider, req.Query, results)
@@ -199,13 +207,12 @@ func generateResponseWithProvider(llmProvider providers.LLMProvider, query strin
 	var sources []string
 
 	for _, result := range contextResults {
-		if payload, ok := result["payload"].(map[string]interface{}); ok {
-			if text, ok := payload["text"].(string); ok {
-				contextTexts = append(contextTexts, text)
-			}
-			if source, ok := payload["source"].(string); ok {
-				sources = append(sources, source)
-			}
+		// Since we're passing the payload directly from searchQdrant, access fields directly
+		if text, ok := result["content"].(string); ok {
+			contextTexts = append(contextTexts, text)
+		}
+		if source, ok := result["url"].(string); ok {
+			sources = append(sources, source)
 		}
 	}
 
