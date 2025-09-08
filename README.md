@@ -123,9 +123,8 @@ cmd/                    # Microservices
 ├── crawler/           # Web scraping service
 ├── parser/            # Text processing service  
 ├── embedder/          # Vector embedding service
-└── rag-api/           # Main API + web interface
+└── rag-api/           # Main API + web interface (inline HTML)
 deploy/k8s/            # Kubernetes manifests
-web/                   # Web UI assets
 docker-compose.yml     # Local development
 Makefile              # Build & run commands
 ```

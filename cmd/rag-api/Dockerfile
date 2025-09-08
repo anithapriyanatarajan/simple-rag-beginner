@@ -10,9 +10,7 @@ FROM alpine:latest
 RUN apk --no-cache add ca-certificates
 WORKDIR /root/
 COPY --from=builder /app ./
-COPY web ./web
 RUN adduser -D -s /bin/sh appuser
-RUN chown -R appuser:appuser ./web
 USER appuser
 EXPOSE 8080
 CMD ["./app"]
